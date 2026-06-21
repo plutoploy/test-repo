@@ -1,0 +1,47 @@
+# .github/workflows/ollama.yml
+
+name: plutoploy bot
+description: generate container recepie.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  detect-and-generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: action/checkout@main
+
+      - name: detect codebase type
+        uses: ai-action/ollama-action@master
+        id: detect
+        with:
+          model: gemma4:12b
+          prompt: 'analyze this repository and return ONLY a JSON object with keys: language, framework, package_manager, entrypoint, port. Example: {"language":"python","framework":"fastapi","package_manager":"pip","entrypoint":"main:app","port":8000}'
+
+      - name: generate container recepie
+        uses: ai-action/ollama-action@master
+        id: model
+        with:
+          model: gemma4:12b
+          prompt: "generate a Dockerfile for this project. Detection result: ${{ steps.detect.outputs.response }}. Requirements: use multi-stage build, minimize image size, use alpine or distroless base, don't reply in markup, just give the raw Dockerfile"
+
+      - name: validate dockerfile
+        run: |
+          echo "$response" | head -1 | grep -q "^FROM" || { echo "ERROR: Invalid Dockerfile - must start with FROM"; exit 1; }
+          echo "$response" | grep -q "CMD\|ENTRYPOINT" || { echo "ERROR: Invalid Dockerfile - no CMD or ENTRYPOINT found"; exit 1; }
+          echo "$response" | grep -q "COPY\|ADD" || { echo "WARNING: No COPY/ADD found - check if files are copied correctly"; }
+        env:
+          response: ${{ steps.model.outputs.response }}
+
+      - name: save response
+        run: |
+          echo "$response"
+          gh secret set PLUTOPLOY_RECEPIE "$response"
+        env:
+          response: ${{ steps.model.outputs.response }}
+          GITHUB_TOKEN: ${{ github.token }}

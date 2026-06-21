@@ -1,7 +1,6 @@
 # .github/workflows/ollama.yml
 
-name: plutoploy bot
-description: generate container recepie.
+name: "plutoploy bot"
 on:
   workflow_dispatch:
 
@@ -14,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: checkout
-        uses: action/checkout@main
+        uses: actions/checkout@main
 
       - name: detect codebase type
         uses: ai-action/ollama-action@master
@@ -45,3 +44,86 @@ jobs:
         env:
           response: ${{ steps.model.outputs.response }}
           GITHUB_TOKEN: ${{ github.token }}
+
+# name: "Auto Containerize with GitHub Models"
+
+# permissions:
+#   contents: read
+#   models: read
+
+# on:
+#   workflow_dispatch:
+#     inputs:
+#       model:
+#         description: "The GitHub model ID to use (e.g., gpt-4o, meta-llama-3-8b-instruct)"
+#         required: false
+#         default: "meta/Llama-3.3-70B-Instruct"
+#       prompt:
+#         description: "Custom instructions for the model"
+#         required: false
+#         default: "Based on the provided repository files, generate a Containerfile return ONLY the raw containerfile content. Do not wrap it in markdown code blocks. Do not add any explanations. Also keep the image size as small as possible."
+
+# jobs:
+#   generate:
+#     runs-on: ubuntu-latest
+#     outputs:
+#       container_recipe: ${{ steps.generate.outputs.recipe }}
+#     steps:
+#       - name: Checkout repository
+#         uses: actions/checkout@v4
+
+#       - name: Setup gh models extension
+#         shell: bash
+#         run: |
+#           gh extension install github/gh-models || true
+#         env:
+#           GH_TOKEN: ${{ github.token }}
+
+#       - name: Gather Project Context
+#         id: context
+#         shell: bash
+#         run: |
+#           CONTEXT_FILE=$(mktemp)
+#           echo "Project directory structure:" > "$CONTEXT_FILE"
+#           find . -maxdepth 2 -not -path '*/\.*' | head -n 50 >> "$CONTEXT_FILE"
+#           echo "" >> "$CONTEXT_FILE"
+
+#           echo "Relevant configuration and dependency files:" >> "$CONTEXT_FILE"
+#           for f in package.json requirements.txt pom.xml build.gradle go.mod Gemfile Cargo.toml; do
+#             if [ -f "$f" ]; then
+#               echo "--- $f ---" >> "$CONTEXT_FILE"
+#               cat "$f" >> "$CONTEXT_FILE"
+#               echo "" >> "$CONTEXT_FILE"
+#             fi
+#           done
+
+#           echo "context_file=$CONTEXT_FILE" >> "$GITHUB_OUTPUT"
+
+#       - name: Generate Container Recipe
+#         id: generate
+#         shell: bash
+#         env:
+#           INPUT_MODEL: ${{ inputs.model }}
+#           INPUT_PROMPT: ${{ inputs.prompt }}
+#         run: |
+#           CONTEXT_FILE="${{ steps.context.outputs.context_file }}"
+#           RECIPE=$(cat "$CONTEXT_FILE" | gh models run "$INPUT_MODEL" "$INPUT_PROMPT")
+#           RECIPE=$(echo "$RECIPE" | sed '/^```/d')
+
+#           rm -f "$CONTEXT_FILE"
+
+#           EOF_DELIMITER=$(openssl rand -hex 8)
+#           echo "CONTAINER_RECIPE<<$EOF_DELIMITER" >> "$GITHUB_ENV"
+#           echo "$RECIPE" >> "$GITHUB_ENV"
+#           echo "$EOF_DELIMITER" >> "$GITHUB_ENV"
+
+#           echo "recipe<<$EOF_DELIMITER" >> "$GITHUB_OUTPUT"
+#           echo "$RECIPE" >> "$GITHUB_OUTPUT"
+#           echo "$EOF_DELIMITER" >> "$GITHUB_OUTPUT"
+
+#       - name: Store Recipe as Secret
+#         shell: bash
+#         env:
+#           GH_TOKEN: ${{ github.token }}
+#         run: |
+#           echo "$CONTAINER_RECIPE" | gh secret set WORKFLOW_RECIPE

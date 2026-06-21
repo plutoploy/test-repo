@@ -1,0 +1,8 @@
+[tools]
+bun = "latest"
+node = "latest"
+action-validator = "latest"
+actionlint = "latest"
+
+[deps]
+bun = { auto = true }

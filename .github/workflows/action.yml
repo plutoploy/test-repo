@@ -16,7 +16,6 @@ jobs:
         uses: actions/checkout@main # v4.2.2
         with:
           token: ${{ github.token }}
-
       - name: check for existing containerfile
         id: existing
         run: |
@@ -27,9 +26,6 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: verify model availability
-        run: |
-          ollama list 2>/dev/null | grep -q "gemma3:12b" || ollama pull gemma3:12b
 
       - name: gather codebase context
         id: context

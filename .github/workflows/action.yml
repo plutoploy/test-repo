@@ -9,13 +9,12 @@ permissions:
 jobs:
   detect-and-generate:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 100
     steps:
       - name: checkout
         uses: actions/checkout@main
         with:
           token: ${{ github.token }}
-          # persist-credentials: false
 
       - name: gather codebase context
         id: context

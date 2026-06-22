@@ -1,3 +1,81 @@
+# name: plutoploy bot
+
+# on:
+#   workflow_dispatch:
+
+# permissions:
+#   contents: write
+#   actions: write
+
+# jobs:
+#   detect-and-generate:
+#     runs-on: ubuntu-latest
+#     steps:
+#       - name: checkout
+#         uses: actions/checkout@main
+#         with:
+#           token: ${{ secrets.GITHUB_TOKEN }}  # Needed for push
+
+#       - name: detect codebase type
+#         uses: ai-action/ollama-action@master
+#         id: detect
+#         with:
+#           model: gemma4:12b
+#           cache: true
+#           prompt: >
+#             Analyze this codebase and return ONLY a recipe to generate an OCI container image.
+#             No markdown fences, no commentary, no explanation — just the contents of the Dockerfile.
+#             The recipe MUST include a CMD instruction.
+
+#       - name: clean and write dockerfile
+#         id: write
+#         env:
+#           response: ${{ steps.detect.outputs.response }}
+#         run: |
+#           # Strip markdown fences and write
+#           clean=$(echo "$response" | sed -e '/^```/d' -e '/^```dockerfile/d')
+
+#           # Basic sanity check before writing
+#           if ! echo "$clean" | grep -qE '^FROM '; then
+#             echo "ERROR: AI response missing FROM instruction"
+#             echo "Raw response:"
+#             echo "$response"
+#             exit 1
+#           fi
+
+#           echo "$clean" > Dockerfile
+#           echo "dockerfile_written=true" >> $GITHUB_OUTPUT
+
+#       - name: validate dockerfile
+#         if: steps.write.outputs.dockerfile_written == 'true'
+#         run: |
+#           echo "=== Generated Dockerfile ==="
+#           cat Dockerfile
+#           echo "============================"
+
+#           if ! grep -qE '^FROM ' Dockerfile; then
+#             echo "ERROR: Invalid Dockerfile - no FROM instruction found"
+#             exit 1
+#           fi
+#           if ! grep -qE '^(CMD|ENTRYPOINT)' Dockerfile; then
+#             echo "ERROR: Invalid Dockerfile - no CMD or ENTRYPOINT found"
+#             exit 1
+#           fi
+#           if ! grep -qE '^(COPY|ADD)' Dockerfile; then
+#             echo "::warning::No COPY/ADD found - check if files are copied correctly"
+#           fi
+
+#       - name: commit dockerfile
+#         if: steps.write.outputs.dockerfile_written == 'true'
+#         run: |
+#           git config user.name "github-actions[bot]"
+#           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+#           git add Dockerfile
+#           git diff --cached --quiet && echo "No changes to commit" || {
+#             git commit -m "chore: generate Dockerfile via plutoploy bot"
+#             git push
+#           }
+
 name: plutoploy bot
 
 on:
@@ -5,7 +83,6 @@ on:
 
 permissions:
   contents: write
-  actions: write
 
 jobs:
   detect-and-generate:
@@ -14,64 +91,84 @@ jobs:
       - name: checkout
         uses: actions/checkout@main
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}  # Needed for push
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: detect codebase type
+      - name: gather codebase context
+        id: context
+        run: |
+          # Build a structured summary of the repo
+          {
+            echo "REPOSITORY FILE TREE:"
+            find . -type f -not -path './.git/*' -not -path './.github/*' | sort | head -100
+            echo ""
+            echo "KEY CONFIGURATION FILES:"
+
+            for file in package.json requirements.txt Cargo.toml go.mod pom.xml build.gradle Gemfile composer.json; do
+              if [ -f "$file" ]; then
+                echo ""
+                echo "--- $file ---"
+                cat "$file"
+              fi
+            done
+
+            echo ""
+            echo "SOURCE CODE SNIPPETS (first 30 lines each):"
+            find . -type f \( -name "*.py" -o -name "*.js" -o -name "*.ts" -o -name "*.go" -o -name "*.rs" -o -name "*.java" -o -name "*.rb" -o -name "*.php" \) -not -path './.git/*' | head -15 | while read -r f; do
+              echo ""
+              echo "=== $f ==="
+              head -n 30 "$f"
+            done
+          } > repo_context.txt
+
+          # Truncate to ~12KB to stay within context limits for gemma4:12b
+          head -c 12000 repo_context.txt > repo_context_trimmed.txt
+
+          # Export for next step
+          echo "content<<EOF" >> $GITHUB_OUTPUT
+          cat repo_context_trimmed.txt >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: detect codebase type and generate Dockerfile
         uses: ai-action/ollama-action@master
         id: detect
         with:
           model: gemma4:12b
           cache: true
           prompt: >
-            Analyze this codebase and return ONLY a recipe to generate an OCI container image.
-            No markdown fences, no commentary, no explanation — just the contents of the Dockerfile.
-            The recipe MUST include a CMD instruction.
+            You are given the following codebase context. Analyze it and return ONLY a Dockerfile to containerize this application.
+            No markdown fences, no commentary, no explanation — just the raw Dockerfile contents.
+            The Dockerfile MUST include a CMD or ENTRYPOINT instruction.
+
+            CODEBASE CONTEXT:
+            ${{ steps.context.outputs.content }}
 
       - name: clean and write dockerfile
-        id: write
         env:
           response: ${{ steps.detect.outputs.response }}
         run: |
-          # Strip markdown fences and write
           clean=$(echo "$response" | sed -e '/^```/d' -e '/^```dockerfile/d')
-          
-          # Basic sanity check before writing
+
           if ! echo "$clean" | grep -qE '^FROM '; then
-            echo "ERROR: AI response missing FROM instruction"
-            echo "Raw response:"
+            echo "ERROR: AI response missing FROM instruction. Raw:"
             echo "$response"
             exit 1
           fi
-          
+
           echo "$clean" > Dockerfile
-          echo "dockerfile_written=true" >> $GITHUB_OUTPUT
 
       - name: validate dockerfile
-        if: steps.write.outputs.dockerfile_written == 'true'
         run: |
-          echo "=== Generated Dockerfile ==="
           cat Dockerfile
-          echo "============================"
-          
           if ! grep -qE '^FROM ' Dockerfile; then
-            echo "ERROR: Invalid Dockerfile - no FROM instruction found"
-            exit 1
+            echo "ERROR: No FROM instruction"; exit 1
           fi
           if ! grep -qE '^(CMD|ENTRYPOINT)' Dockerfile; then
-            echo "ERROR: Invalid Dockerfile - no CMD or ENTRYPOINT found"
-            exit 1
-          fi
-          if ! grep -qE '^(COPY|ADD)' Dockerfile; then
-            echo "::warning::No COPY/ADD found - check if files are copied correctly"
+            echo "ERROR: No CMD or ENTRYPOINT"; exit 1
           fi
 
       - name: commit dockerfile
-        if: steps.write.outputs.dockerfile_written == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Dockerfile
-          git diff --cached --quiet && echo "No changes to commit" || {
-            git commit -m "chore: generate Dockerfile via plutoploy bot"
-            git push
-          }
+          git diff --cached --quiet && echo "No changes" || (git commit -m "chore: generate Dockerfile via plutoploy bot" && git push)

@@ -14,7 +14,7 @@ jobs:
       - name: checkout
         uses: actions/checkout@main
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}  # Needed for push
+          token: ${{ github.token }} # Needed for push
 
       - name: detect codebase type
         uses: ai-action/ollama-action@master
@@ -34,7 +34,7 @@ jobs:
         run: |
           # Strip markdown fences and write
           clean=$(echo "$response" | sed -e '/^```/d' -e '/^```dockerfile/d')
-          
+
           # Basic sanity check before writing
           if ! echo "$clean" | grep -qE '^FROM '; then
             echo "ERROR: AI response missing FROM instruction"
@@ -42,7 +42,7 @@ jobs:
             echo "$response"
             exit 1
           fi
-          
+
           echo "$clean" > Dockerfile
           echo "dockerfile_written=true" >> $GITHUB_OUTPUT
 
@@ -52,7 +52,7 @@ jobs:
           echo "=== Generated Dockerfile ==="
           cat Dockerfile
           echo "============================"
-          
+
           if ! grep -qE '^FROM ' Dockerfile; then
             echo "ERROR: Invalid Dockerfile - no FROM instruction found"
             exit 1
@@ -68,8 +68,8 @@ jobs:
       - name: commit dockerfile
         if: steps.write.outputs.dockerfile_written == 'true'
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "plutoploy[bot]"
+          git config user.email "plutoploy[bot]@users.noreply.github.com"
           git add Dockerfile
           git diff --cached --quiet && echo "No changes to commit" || {
             git commit -m "chore: generate Dockerfile via plutoploy bot"

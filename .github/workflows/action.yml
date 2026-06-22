@@ -23,7 +23,6 @@ jobs:
             find . -type f -not -path './.git/*' -not -path './.github/*' | sort | head -100
             echo ""
             echo "KEY CONFIGURATION FILES:"
-
             for file in package.json requirements.txt Cargo.toml go.mod pom.xml build.gradle Gemfile composer.json; do
               if [ -f "$file" ]; then
                 echo ""
@@ -31,7 +30,6 @@ jobs:
                 cat "$file"
               fi
             done
-
             echo ""
             echo "SOURCE CODE SNIPPETS (first 30 lines each):"
             find . -type f \( -name "*.py" -o -name "*.js" -o -name "*.ts" -o -name "*.go" -o -name "*.rs" -o -name "*.java" -o -name "*.rb" -o -name "*.php" \) -not -path './.git/*' | head -15 | while read -r f; do
@@ -41,39 +39,42 @@ jobs:
             done
           } > repo_context.txt
           head -c 12000 repo_context.txt > repo_context_trimmed.txt
-          echo "content" >> $GITHUB_OUTPUT
-          cat repo_context_trimmed.txt >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          delimiter="EOF_$(date +%s)_$$"
+          {
+            echo "content<<${delimiter}"
+            cat repo_context_trimmed.txt
+            echo "${delimiter}"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: detect codebase type and generate Dockerfile
+      - name: detect codebase type and generate 
         uses: ai-action/ollama-action@master
         id: detect
         with:
           model: gemma4:12b
           cache: true
           prompt: >
-            You are given the following codebase context. Analyze it and return ONLY a Dockerfile to containerize this application.
-            No markdown fences, no commentary, no explanation — just the raw Dockerfile contents.
-            The Dockerfile MUST include a CMD or ENTRYPOINT instruction.
+            You are given the following codebase context. Analyze it and return ONLY a Containerfile to containerize this application.
+            No markdown fences, no commentary, no explanation — just the raw Containerfile contents.
+            The Containerfile MUST include a CMD or ENTRYPOINT instruction.
 
             CODEBASE CONTEXT:
             ${{ steps.context.outputs.content }}
 
-      - name: clean and write dockerfile
+      - name: clean and write Containerfile
         env:
           response: ${{ steps.detect.outputs.response }}
         run: |
-          clean=$(echo "$response" | sed -e '/^```/d' -e '/^```dockerfile/d')
-
+          clean=$(echo "$response" | sed -e '/^```/d' -e '/^```Containerfile/d')
+          
           if ! echo "$clean" | grep -qE '^FROM '; then
             echo "ERROR: AI response missing FROM instruction. Raw:"
             echo "$response"
             exit 1
           fi
-
+          
           echo "$clean" > Containerfile
 
-      - name: validate dockerfile
+      - name: validate Containerfile
         run: |
           cat Containerfile
           if ! grep -qE '^FROM ' Containerfile; then
@@ -83,9 +84,9 @@ jobs:
             echo "ERROR: No CMD or ENTRYPOINT"; exit 1
           fi
 
-      - name: commit dockerfile
+      - name: commit Containerfile
         run: |
-          git config user.name "plutoploy[bot]"
-          git config user.email "plutoploy[bot]@users.noreply.github.com"
+          git config user.name "plutoploy-gh[bot]"
+          git config user.email "plutoploy-gh-bot[bot]@users.noreply.github.com"
           git add Containerfile
           git diff --cached --quiet && echo "No changes" || (git commit -m "chore: generate Containerfile via plutoploy bot" && git push)

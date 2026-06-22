@@ -12,10 +12,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: checkout
-        uses: actions/checkout@b9e0990d219a03df7633c93f6f005a8fecbcab22
+        uses: actions/checkout@main
         with:
           token: ${{ github.token }}
-          persist-credentials: false
+          # persist-credentials: false
 
       - name: gather codebase context
         id: context
@@ -50,7 +50,7 @@ jobs:
            } >> "$GITHUB_OUTPUT"
 
       - name: detect codebase type and generate
-        uses: ai-action/ollama-action@e4d8e5a7b4b69a8ae27c1b6d552836d8f4e21dee
+        uses: ai-action/ollama-action@master
         id: detect
         with:
           model: gemma4:12b

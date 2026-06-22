@@ -3,6 +3,8 @@ bun = "latest"
 node = "latest"
 action-validator = "latest"
 actionlint = "latest"
+pinact = "latest"
+ghalint = "latest"
 
 [deps]
 bun = { auto = true }

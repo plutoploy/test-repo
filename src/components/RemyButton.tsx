@@ -1,5 +1,5 @@
-import { ChefHat, ChevronRight } from 'lucide-react'
-import { showRemyAssistant } from './RemyAssistant'
+import { ChefHat, ChevronRight } from "lucide-react";
+import { showRemyAssistant } from "./RemyAssistant";
 
 export default function RemyButton() {
   return (
@@ -14,5 +14,5 @@ export default function RemyButton() {
       </div>
       <ChevronRight className="w-4 h-4" />
     </button>
-  )
+  );
 }

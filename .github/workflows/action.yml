@@ -76,21 +76,21 @@ jobs:
             exit 1
           fi
 
-          echo "$clean" > Dockerfile
+          echo "$clean" > Containerfile
 
       - name: validate dockerfile
         run: |
-          cat Dockerfile
-          if ! grep -qE '^FROM ' Dockerfile; then
+          cat Containerfile
+          if ! grep -qE '^FROM ' Containerfile; then
             echo "ERROR: No FROM instruction"; exit 1
           fi
-          if ! grep -qE '^(CMD|ENTRYPOINT)' Dockerfile; then
+          if ! grep -qE '^(CMD|ENTRYPOINT)' Containerfile; then
             echo "ERROR: No CMD or ENTRYPOINT"; exit 1
           fi
 
       - name: commit dockerfile
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "actions[bot]@users.noreply.github.com"
-          git add Dockerfile
-          git diff --cached --quiet && echo "No changes" || (git commit -m "chore: generate Dockerfile via plutoploy bot" && git push)
+          git config user.name "plutoploy[bot]"
+          git config user.email "plutoploy[bot]@users.noreply.github.com"
+          git add Containerfile
+          git diff --cached --quiet && echo "No changes" || (git commit -m "chore: generate Containerfile via plutoploy bot" && git push)

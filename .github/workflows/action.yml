@@ -5,62 +5,46 @@ on:
 
 permissions:
   contents: write
+  actions: write
+  id_token: write
 
 jobs:
   detect-and-generate:
     runs-on: ubuntu-latest
     steps:
       - name: checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@main
 
       - name: detect codebase type
-        uses: ai-action/ollama-action@v2
+        uses: ai-action/ollama-action@master
         id: detect
         with:
-          model: deepseek-coder:6.7b
+          model: gemma4:12b
           cache: true
           prompt: >
-            Analyze this repository and return ONLY a JSON object with keys:
-            language, framework, package_manager, entrypoint, port.
-            No markdown fences, no commentary, no explanation - just the JSON.
-            Example: {"language":"python","framework":"fastapi","package_manager":"pip","entrypoint":"main:app","port":8000}
+            Analyze this codebase and return ONLY a recipe to generate a oci container image 
+            No markdown fences, no commentary, no explanation - just the contents of the dockerfile.
 
       - name: validate detection output
         id: validate_detect
         env:
           response: ${{ steps.detect.outputs.response }}
         run: |
-          # Strip accidental markdown fences before validating
           clean=$(echo "$response" | sed -e '/^```/d')
 
-          if ! echo "$clean" | jq empty 2>/dev/null; then
-            echo "ERROR: detection step did not return valid JSON"
-            echo "$clean"
-            exit 1
-          fi
-
-          {
-            echo "json<<DETECT_EOF"
-            echo "$clean"
-            echo "DETECT_EOF"
-          } >> "$GITHUB_OUTPUT"
-
       - name: generate container recipe
-        uses: ai-action/ollama-action@v2
+        uses: ai-action/ollama-action@master
         id: model
         with:
-          model: deepseek-coder:6.7b
+          model: gemma4:12b
           cache: true
           prompt: |
-            Generate a Dockerfile for this project. Detection result: ${{ steps.validate_detect.outputs.json }}
-            Requirements: use a multi-stage build, minimize image size, use an alpine or distroless base image.
-            Reply with ONLY the raw Dockerfile contents - no markdown fences, no commentary, no explanation.
+            Review the recipe "${{ steps.detect.outputs.response }}" and make sure that it has a `CMD []` block
 
       - name: write dockerfile
         env:
           response: ${{ steps.model.outputs.response }}
         run: |
-          # Strip accidental markdown fences
           echo "$response" | sed -e '/^```/d' > Dockerfile
 
       - name: validate dockerfile
